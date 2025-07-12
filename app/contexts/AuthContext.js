@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 
 const AuthContext = createContext(undefined)
@@ -18,201 +17,76 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    let mounted = true
-
-    // Get initial session with better error handling
-    const getInitialSession = async () => {
-      try {
-        setIsLoading(true)
-        console.log('Getting initial session...')
-        const { data: { session }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error getting session:', error)
-          // Don't fail completely on session errors, just log and continue
-          if (mounted) setIsLoading(false)
-          return
-        }
-        
-        if (session?.user && mounted) {
-          console.log('Found existing session for:', session.user.email)
-          await fetchUserProfile(session.user)
-        } else {
-          console.log('No existing session found')
-          if (mounted) setIsLoading(false)
-        }
-      } catch (error) {
-        console.error('Critical error in getInitialSession:', error)
-        // Set a fallback state instead of staying in loading forever
-        if (mounted) setIsLoading(false)
-      }
-    }
-
-    getInitialSession()
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.email || 'no user')
-      
-      if (!mounted) return
-
-      if (event === 'SIGNED_IN' && session?.user) {
-        await fetchUserProfile(session.user)
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null)
-        setIsLoading(false)
-        console.log('User signed out')
-      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        console.log('Token refreshed for:', session.user.email)
-      }
-    })
-
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  const fetchUserProfile = async (supabaseUser) => {
-    try {
-      setIsLoading(true)
-      console.log('Fetching profile for user:', supabaseUser.id)
-      
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Database error fetching profile:', error)
-        createFallbackUser(supabaseUser, supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User')
-        return
-      }
-
-      if (error) {
-        console.error('Error fetching profile:', error)
-        
-        // If profile doesn't exist, create one
-        if (error.code === 'PGRST116') {
-          console.log('Profile not found, creating default profile')
-          const defaultName = supabaseUser.user_metadata?.name || 
-                             supabaseUser.email?.split('@')[0] || 
-                             'User'
-          console.log('Creating new profile for user:', supabaseUser.id)
-          
-          try {
-            const { data: newProfile, error: insertError } = await supabase
-              .from('profiles')
-              .insert({
-                id: supabaseUser.id,
-                name: defaultName,
-                role: 'buyer',
-                city: 'Mumbai',
-                is_verified: false
-              })
-              .select()
-              .single()
-          
-            if (insertError) {
-              console.error('Error creating profile:', insertError)
-              createFallbackUser(supabaseUser, defaultName)
-            } else if (newProfile) {
-              console.log('Profile created successfully:', newProfile)
-              setUser({
-                id: newProfile.id,
-                email: supabaseUser.email || '',
-                name: newProfile.name,
-                role: newProfile.role,
-                city: newProfile.city || 'Mumbai',
-                isVerified: newProfile.is_verified,
-                businessName: newProfile.business_name || undefined,
-                description: newProfile.description || undefined
-              })
-            }
-          } catch (insertError) {
-            console.error('Error creating profile:', insertError)
-            console.warn('Failed to create profile in database, using fallback')
-            // Create fallback user
-            createFallbackUser(supabaseUser, defaultName)
-          }
-        } else {
-          // Other database errors - create fallback user
-          const defaultName = supabaseUser.user_metadata?.name || 
-                             supabaseUser.email?.split('@')[0] || 
-                             'User'
-          createFallbackUser(supabaseUser, defaultName)
-        }
-      } else if (profile) {
-        console.log('Profile loaded successfully:', profile.name)
-        setUser({
-          id: profile.id,
-          email: supabaseUser.email || '',
-          name: profile.name,
-          role: profile.role,
-          city: profile.city || 'Mumbai',
-          isVerified: profile.is_verified,
-          businessName: profile.business_name || undefined,
-          description: profile.description || undefined
-        })
-      }
-    } catch (error) {
-      console.error('Error in fetchUserProfile:', error)
-      console.warn('Using fallback user due to profile fetch error')
-      const defaultName = supabaseUser.user_metadata?.name || 
-                         supabaseUser.email?.split('@')[0] || 
-                         'User'
-      createFallbackUser(supabaseUser, defaultName)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const createFallbackUser = (supabaseUser, defaultName) => {
-    console.warn('Creating fallback user profile')
-    console.log('Fallback user created for:', supabaseUser.email || supabaseUser.id)
-    setUser({
-      id: supabaseUser.id,
-      email: supabaseUser.email || '',
-      name: defaultName,
+  // Demo users for testing
+  const demoUsers = [
+    {
+      id: 'buyer-1',
+      email: 'buyer@demo.com',
+      password: 'password123',
+      name: 'John Buyer',
       role: 'buyer',
       city: 'Mumbai',
-      isVerified: false
-    })
-  }
+      isVerified: true
+    },
+    {
+      id: 'seller-1',
+      email: 'seller@demo.com',
+      password: 'password123',
+      name: 'Jane Seller',
+      role: 'seller',
+      city: 'Mumbai',
+      isVerified: true,
+      businessName: 'Jane\'s Crafts',
+      description: 'Beautiful handmade items'
+    },
+    {
+      id: 'admin-1',
+      email: 'admin@demo.com',
+      password: 'password123',
+      name: 'Admin User',
+      role: 'admin',
+      city: 'Mumbai',
+      isVerified: true
+    }
+  ]
+
+  useEffect(() => {
+    // Check for saved user session
+    const savedUser = localStorage.getItem('currentUser')
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser))
+      } catch (error) {
+        console.error('Error parsing saved user:', error)
+        localStorage.removeItem('currentUser')
+      }
+    }
+  }, [])
 
   const login = async (email, password) => {
     try {
       setIsLoading(true)
       console.log('Attempting login for:', email)
       
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password
-      })
+      // Find demo user
+      const demoUser = demoUsers.find(u => 
+        u.email === email.trim().toLowerCase() && u.password === password
+      )
 
-      if (error) {
-        console.error('Login failed:', error.message)
-        
-        // Provide more specific error messages
-        if (error.message.includes('Invalid login credentials')) {
-          toast.error('Invalid email or password. Please check your credentials.')
-        } else if (error.message.includes('Email not confirmed')) {
-          toast.error('Please check your email and confirm your account.')
-        } else {
-          toast.error(error.message || 'Login failed')
-        }
+      if (!demoUser) {
+        toast.error('Invalid email or password. Please check your credentials.')
         return false
       }
 
-      if (data.user) {
-        console.log('Login successful, fetching profile...')
-        toast.success('Welcome back!')
-        return true
-      }
+      // Set user without password
+      const { password: _, ...userWithoutPassword } = demoUser
+      setUser(userWithoutPassword)
+      localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword))
+      
+      console.log('Login successful')
+      toast.success('Welcome back!')
+      return true
 
-      return false
     } catch (error) {
       console.error('Critical login error:', error)
       toast.error('An unexpected error occurred. Please try again.')
@@ -237,71 +111,42 @@ export const AuthProvider = ({ children }) => {
       setIsLoading(true)
       console.log('Attempting registration for:', email, 'as', role)
       
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            name,
-            role,
-            city,
-            business_name: businessName || null,
-            description: description || null,
-            mobile: mobile || null,
-            verification_doc: verificationDoc || null
-          }
-        }
-      })
-      
-      if (error) {
-        console.error('Registration failed:', error.message)
-        if (error.message.includes('already registered')) {
-          toast.error('This email is already registered. Please try logging in.')
-        } else {
-          toast.error(error.message || 'Registration failed')
-        }
+      // Check if email already exists
+      const existingUser = demoUsers.find(u => u.email === email.trim().toLowerCase())
+      if (existingUser) {
+        toast.error('This email is already registered. Please try logging in.')
         return false
       }
       
-      if (data.user) {
-        console.log('User registered, creating profile...')
-        // Create profile immediately
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            name,
-            role,
-            city,
-            business_name: businessName,
-            description,
-            is_verified: role === 'buyer' || role === 'admin', // Buyers and admins are auto-verified
-            mobile: role === 'seller' ? mobile : undefined,
-            verification_doc: role === 'seller' ? verificationDoc : undefined
-          })
-        
-        if (profileError) {
-          console.error('Profile creation error:', profileError)
-          console.warn('Profile creation failed, but user account was created successfully')
-          if (role === 'seller') {
-            toast.success('Seller account created! Please wait for admin approval before you can start listing products.')
-          } else {
-            toast.success('Account created successfully! Profile will be set up automatically on first login.')
-          }
-          return true
-        }
-        
-        console.log('Profile created successfully')
-        
-        if (role === 'seller') {
-          toast.success('Seller account created successfully! Please wait for admin approval to start listing products.')
-        } else {
-          toast.success('Account created successfully! Welcome to Zaryah!')
-        }
-        return true
+      // Create new user
+      const newUser = {
+        id: `user-${Date.now()}`,
+        email: email.trim().toLowerCase(),
+        name,
+        role,
+        city,
+        isVerified: role === 'buyer' || role === 'admin',
+        businessName: role === 'seller' ? businessName : undefined,
+        description: role === 'seller' ? description : undefined,
+        mobile: role === 'seller' ? mobile : undefined
       }
       
-      return false
+      // Add to demo users (in real app, this would be saved to database)
+      demoUsers.push({ ...newUser, password })
+      
+      // Set current user
+      setUser(newUser)
+      localStorage.setItem('currentUser', JSON.stringify(newUser))
+      
+      console.log('Registration successful')
+      
+      if (role === 'seller') {
+        toast.success('Seller account created successfully! Please wait for admin approval to start listing products.')
+      } else {
+        toast.success('Account created successfully! Welcome to Zaryah!')
+      }
+      return true
+      
     } catch (error) {
       console.error('Critical registration error:', error)
       toast.error('An unexpected error occurred. Please try again.')
@@ -315,15 +160,12 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Logging out user...')
       setIsLoading(true)
-      const { error } = await supabase.auth.signOut()
-      if (error) {
-        console.error('Logout error:', error)
-        toast.error('Logout failed')
-      } else {
-        setUser(null)
-        toast.success('Logged out successfully')
-        console.log('Logout successful')
-      }
+      
+      setUser(null)
+      localStorage.removeItem('currentUser')
+      toast.success('Logged out successfully')
+      console.log('Logout successful')
+      
     } catch (error) {
       console.error('Unexpected logout error:', error)
       toast.error('Logout failed')

@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 import toast from 'react-hot-toast'
 
@@ -34,81 +33,14 @@ export const AppProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    refreshData()
+    // Initialize with sample data
+    setProducts(getSampleProducts())
+    setIsLoading(false)
   }, [])
 
-  const refreshData = async () => {
-    console.log('Refreshing app data...')
-    setIsLoading(true)
-    try {
-      await Promise.all([
-        fetchProducts(),
-        fetchDeliveryCities(),
-        fetchCurrentTheme()
-      ])
-    } catch (error) {
-      console.error('Error refreshing data:', error)
-      toast.error('Failed to load data')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const fetchProducts = async () => {
-    try {
-      console.log('Fetching products...')
-      
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          *,
-          profiles!products_seller_id_fkey (
-            name,
-            is_verified
-          )
-        `)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching products:', error)
-        // Check if it's a connection error or table doesn't exist
-        if (error.code === '42P01' || error.message.includes('relation') || error.message.includes('does not exist')) {
-          console.warn('Products table not found, using fallback data')
-        } else {
-          console.warn('Failed to load products from database, using fallback data')
-        }
-        console.log('Using sample products as fallback')
-        setProducts(getSampleProducts())
-        return
-      }
-
-      console.log('Products fetched:', data?.length || 0)
-
-      const formattedProducts = (data || []).map(product => ({
-        ...product,
-        id: product.id,
-        sellerId: product.seller_id,
-        sellerName: product.profiles?.name || 'Unknown Seller',
-        name: product.name,
-        price: product.price / 100, // Convert from paise to rupees
-        image: product.image_url || 'https://images.pexels.com/photos/1030303/pexels-photo-1030303.jpeg?auto=compress&cs=tinysrgb&w=800',
-        description: product.description,
-        videoUrl: product.video_url || undefined,
-        city: product.city,
-        instantDeliveryEligible: product.instant_delivery_eligible,
-        status: product.status,
-        category: product.category,
-        tags: product.tags || [],
-        createdAt: product.created_at
-      }))
-
-      console.log('Formatted products:', formattedProducts.length)
-      setProducts(formattedProducts)
-    } catch (error) {
-      console.error('Error in fetchProducts:', error)
-      console.warn('Failed to load products, using fallback data')
-      setProducts(getSampleProducts())
-    }
+  const refreshData = () => {
+    // Refresh with sample data
+    setProducts(getSampleProducts())
   }
 
   // Fallback sample products for when database is not available
@@ -176,63 +108,6 @@ export const AppProvider = ({ children }) => {
     }
   ]
 
-  const fetchDeliveryCities = async () => {
-    try {
-      console.log('Fetching delivery cities...')
-      const { data, error } = await supabase
-        .from('delivery_cities')
-        .select('*')
-        .order('name')
-
-      if (error) {
-        console.error('Error fetching delivery cities:', error)
-        console.warn('Could not fetch delivery cities, using empty array')
-        return
-      }
-
-      const formattedCities = (data || []).map(city => ({
-        id: city.id,
-        name: city.name,
-        isActive: city.is_active
-      }))
-
-      console.log('Delivery cities loaded:', formattedCities.length)
-      setDeliveryCities(formattedCities)
-    } catch (error) {
-      console.error('Error in fetchDeliveryCities:', error)
-    }
-  }
-
-  const fetchCurrentTheme = async () => {
-    try {
-      console.log('Fetching current theme...')
-      const { data, error } = await supabase
-        .from('themes')
-        .select('*')
-        .eq('is_active', true)
-        .single()
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching theme:', error)
-        console.warn('Could not fetch theme, using default')
-        return
-      }
-
-      if (data) {
-        setCurrentTheme({
-          name: data.name,
-          colors: data.colors,
-          isActive: data.is_active
-        })
-        console.log('Theme loaded:', data.name)
-      } else {
-        console.log('No active theme found, using default')
-      }
-    } catch (error) {
-      console.error('Error in fetchCurrentTheme:', error)
-    }
-  }
-
   const addProduct = async (productData) => {
     if (!user) {
       console.error('No user found for adding product')
@@ -241,29 +116,24 @@ export const AppProvider = ({ children }) => {
     }
 
     try {
-      const { error } = await supabase
-        .from('products')
-        .insert({
-          seller_id: productData.sellerId,
-          name: productData.name,
-          price: Math.round(productData.price * 100), // Convert to paise
-          image_url: productData.image,
-          description: productData.description,
-          video_url: productData.videoUrl,
-          city: productData.city,
-          instant_delivery_eligible: productData.instantDeliveryEligible,
-          category: productData.category,
-          tags: productData.tags
-        })
-
-      if (error) {
-        console.error('Error adding product:', error)
-        toast.error('Failed to add product')
-        return false
+      const newProduct = {
+        id: `product-${Date.now()}`,
+        sellerId: user.id,
+        sellerName: user.name,
+        name: productData.name,
+        price: productData.price,
+        image: productData.image || 'https://images.pexels.com/photos/1030303/pexels-photo-1030303.jpeg?auto=compress&cs=tinysrgb&w=800',
+        description: productData.description,
+        city: user.city,
+        instantDeliveryEligible: false,
+        status: 'pending',
+        category: productData.category,
+        tags: productData.tags || [],
+        createdAt: new Date().toISOString()
       }
 
+      setProducts(prev => [newProduct, ...prev])
       toast.success('Product added successfully!')
-      await fetchProducts()
       console.log('Product added successfully')
       return true
     } catch (error) {
@@ -276,31 +146,12 @@ export const AppProvider = ({ children }) => {
   const updateProduct = async (productId, updates) => {
     try {
       console.log('Updating product:', productId, updates)
-      const dbUpdates = {}
-      
-      if (updates.status) dbUpdates.status = updates.status
-      if (updates.price) dbUpdates.price = Math.round(updates.price * 100) // Convert to paise
-      if (updates.name) dbUpdates.name = updates.name
-      if (updates.description) dbUpdates.description = updates.description
-      if (updates.image) dbUpdates.image_url = updates.image
-      if (updates.videoUrl !== undefined) dbUpdates.video_url = updates.videoUrl
-      if (updates.instantDeliveryEligible !== undefined) dbUpdates.instant_delivery_eligible = updates.instantDeliveryEligible
-      if (updates.category) dbUpdates.category = updates.category
-      if (updates.tags) dbUpdates.tags = updates.tags
 
-      const { error } = await supabase
-        .from('products')
-        .update(dbUpdates)
-        .eq('id', productId)
-
-      if (error) {
-        console.error('Error updating product:', error)
-        toast.error('Failed to update product')
-        return false
-      }
+      setProducts(prev => prev.map(product =>
+        product.id === productId ? { ...product, ...updates } : product
+      ))
 
       toast.success('Product updated successfully!')
-      await fetchProducts()
       console.log('Product updated successfully')
       return true
     } catch (error) {
@@ -313,19 +164,8 @@ export const AppProvider = ({ children }) => {
   const updateDeliveryCity = async (cityId, isActive) => {
     try {
       console.log('Updating delivery city:', cityId, isActive)
-      const { error } = await supabase
-        .from('delivery_cities')
-        .update({ is_active: isActive })
-        .eq('id', cityId)
-
-      if (error) {
-        console.error('Error updating delivery city:', error)
-        toast.error('Failed to update delivery city')
-        return false
-      }
-
+      // Mock update for demo
       toast.success('Delivery city updated successfully!')
-      await fetchDeliveryCities()
       return true
     } catch (error) {
       console.error('Error in updateDeliveryCity:', error)
@@ -337,26 +177,9 @@ export const AppProvider = ({ children }) => {
   const updateTheme = async (themeName) => {
     try {
       console.log('Updating theme to:', themeName)
-      // First, deactivate all themes
-      await supabase
-        .from('themes')
-        .update({ is_active: false })
-        .neq('id', '')
-
-      // Then activate the selected theme
-      const { error } = await supabase
-        .from('themes')
-        .update({ is_active: true })
-        .eq('name', themeName)
-
-      if (error) {
-        console.error('Error updating theme:', error)
-        toast.error('Failed to update theme')
-        return false
-      }
-
+      // Mock update for demo
+      setCurrentTheme(prev => ({ ...prev, name: themeName }))
       toast.success('Theme updated successfully!')
-      await fetchCurrentTheme()
       return true
     } catch (error) {
       console.error('Error in updateTheme:', error)

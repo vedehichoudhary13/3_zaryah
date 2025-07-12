@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 
 // Helper for animated heading (letter-by-letter)
 const AnimatedHeading = ({ text }) => {
@@ -25,9 +24,30 @@ const AnimatedHeading = ({ text }) => {
 }
 
 export const VideoCarousel = () => {
-  const [videos, setVideos] = useState([])
+  const [videos, setVideos] = useState([
+    {
+      id: '1',
+      title: 'Artisan Stories',
+      description: 'Handcrafted ceramic pieces that tell stories of tradition and passion',
+      maker_name: 'Priya Sharma',
+      location: 'Mumbai, India',
+      video_url: 'https://images.pexels.com/photos/5553045/pexels-photo-5553045.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      is_active: true,
+      order_index: 1
+    },
+    {
+      id: '2',
+      title: 'Natural Creations',
+      description: 'Eco-friendly candles made with love and natural ingredients',
+      maker_name: 'Ravi Kumar',
+      location: 'Bangalore, India',
+      video_url: 'https://images.pexels.com/photos/5624983/pexels-photo-5624983.jpeg?auto=compress&cs=tinysrgb&w=1200',
+      is_active: true,
+      order_index: 2
+    }
+  ])
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const ref = useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
   // Parallax: background moves slower and zooms in
@@ -40,34 +60,9 @@ export const VideoCarousel = () => {
   const contentOpacity = useTransform(scrollYProgress, [0, 0.2, 1], [0, 1, 1])
 
   useEffect(() => {
-    fetchHeroVideos()
+    // Videos are already set in state, no need to fetch
+    console.log('Hero videos loaded:', videos.length)
   }, [])
-
-  const fetchHeroVideos = async () => {
-    try {
-      console.log('Fetching hero videos...')
-      const { data, error } = await supabase
-        .from('hero_videos')
-        .select('*')
-        .eq('is_active', true)
-        .order('order_index')
-
-      if (error) {
-        console.error('Error fetching hero videos:', error)
-        console.warn('Using fallback hero content')
-        return
-      }
-
-      if (data && data.length > 0) {
-        console.log('Hero videos loaded:', data.length)
-        setVideos(data)
-      }
-    } catch (error) {
-      console.error('Error in fetchHeroVideos:', error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   useEffect(() => {
     if (videos.length > 0) {

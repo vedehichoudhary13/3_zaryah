@@ -1,7 +1,6 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
 import toast from 'react-hot-toast'
 
@@ -17,80 +16,26 @@ export const useNotifications = () => {
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth()
-  const [notifications, setNotifications] = useState([])
+  const [notifications, setNotifications] = useState([
+    {
+      id: '1',
+      title: 'Welcome to Zaryah!',
+      message: 'Start exploring unique handmade gifts from passionate artisans.',
+      type: 'info',
+      read: false,
+      created_at: new Date().toISOString()
+    }
+  ])
 
   useEffect(() => {
     if (user) {
-      fetchNotifications()
-      setupRealtimeSubscription()
+      // Initialize with sample notifications
+      console.log('User logged in, notifications ready')
     }
   }, [user])
 
-  const fetchNotifications = async () => {
-    if (!user) return
-
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50)
-
-      if (error) {
-        console.error('Error fetching notifications:', error)
-        return
-      }
-
-      setNotifications(data || [])
-    } catch (error) {
-      console.error('Error in fetchNotifications:', error)
-    }
-  }
-
-  const setupRealtimeSubscription = () => {
-    if (!user) return
-
-    const subscription = supabase
-      .channel('notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          const newNotification = payload.new
-          setNotifications(prev => [newNotification, ...prev])
-          
-          // Show toast notification
-          toast.success(newNotification.title, {
-            duration: 5000,
-            position: 'top-right',
-          })
-        }
-      )
-      .subscribe()
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }
-
   const markAsRead = async (notificationId) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId)
-
-      if (error) {
-        console.error('Error marking notification as read:', error)
-        return
-      }
-
       setNotifications(prev =>
         prev.map(notification =>
           notification.id === notificationId
@@ -107,17 +52,6 @@ export const NotificationProvider = ({ children }) => {
     if (!user) return
 
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('user_id', user.id)
-        .eq('read', false)
-
-      if (error) {
-        console.error('Error marking all notifications as read:', error)
-        return
-      }
-
       setNotifications(prev =>
         prev.map(notification => ({ ...notification, read: true }))
       )
@@ -128,16 +62,6 @@ export const NotificationProvider = ({ children }) => {
 
   const deleteNotification = async (notificationId) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .delete()
-        .eq('id', notificationId)
-
-      if (error) {
-        console.error('Error deleting notification:', error)
-        return
-      }
-
       setNotifications(prev =>
         prev.filter(notification => notification.id !== notificationId)
       )
@@ -150,26 +74,25 @@ export const NotificationProvider = ({ children }) => {
     if (!user) return
 
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: user.id,
-          type: notification.type,
-          title: notification.title,
-          message: notification.message,
-          data: notification.data
-        })
-
-      if (error) {
-        console.error('Error creating notification:', error)
+      const newNotification = {
+        id: Date.now().toString(),
+        title: notification.title,
+        message: notification.message,
+        type: notification.type,
+        read: false,
+        created_at: new Date().toISOString()
       }
+      
+      setNotifications(prev => [newNotification, ...prev])
+      toast.success(notification.title)
     } catch (error) {
       console.error('Error in createNotification:', error)
     }
   }
 
   const refreshNotifications = async () => {
-    await fetchNotifications()
+    // Mock refresh
+    console.log('Notifications refreshed')
   }
 
   const unreadCount = notifications.filter(n => !n.read).length
